@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Converter Pro</title>
+  <meta name="description" content="Generate and scan QR codes instantly, fully in your browser." />
+
+  <!-- Favicon (inline SVG, no extra file needed) -->
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+
+  <!-- Fonts: Space Grotesk (display), Inter (body/UI), IBM Plex Mono (data/codes) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- QR generation -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <!-- QR scanning (camera + image file, one library covers both) -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+
+  <!-- Decorative module-grid backdrop, echoes a QR code's own structure -->
+  <div class="grid-backdrop" aria-hidden="true"></div>
+
+  <div class="app">
+
+    <!-- ===== Header ===== -->
+    <header class="app-header">
+      <div class="brand">
+        <svg class="brand-mark" width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+          <rect x="5" y="5" width="4" height="4" fill="currentColor"/>
+          <rect x="21" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+          <rect x="25" y="5" width="4" height="4" fill="currentColor"/>
+          <rect x="1" y="21" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+          <rect x="5" y="25" width="4" height="4" fill="currentColor"/>
+          <rect x="21" y="21" width="4" height="4" fill="currentColor"/>
+          <rect x="29" y="21" width="4" height="4" fill="currentColor"/>
+          <rect x="21" y="29" width="4" height="4" fill="currentColor"/>
+          <rect x="29" y="29" width="4" height="4" fill="currentColor"/>
+          <rect x="25" y="25" width="4" height="4" fill="currentColor"/>
+        </svg>
+        <div class="brand-text">
+          <span class="brand-title">QR Converter Pro</span>
+          <span class="brand-tag">generate &amp; scan, entirely on your device</span>
+        </div>
+      </div>
+
+      <button id="theme-toggle" class="icon-btn" type="button" aria-label="Switch color theme" title="Switch theme">
+        <svg id="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8l1.8-1.8M18 6l1.8-1.8"/></svg>
+        <svg id="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/></svg>
+      </button>
+    </header>
+
+    <!-- ===== Tabs ===== -->
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab active" role="tab" aria-selected="true" data-tab="generate" type="button">
+        <span class="tab-index">01</span> Generate
+      </button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="scan" type="button">
+        <span class="tab-index">02</span> Scan
+      </button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="history" type="button">
+        <span class="tab-index">03</span> History
+      </button>
+    </nav>
+
+    <main class="panels">
+
+      <!-- ===== GENERATE PANEL ===== -->
+      <section id="panel-generate" class="panel active" role="tabpanel">
+        <div class="card form-card">
+
+          <div class="field-group">
+            <label class="field-label">Content type</label>
+            <div class="chip-row" id="type-chips">
+              <button class="chip active" data-type="text" type="button">Text</button>
+              <button class="chip" data-type="url" type="button">URL</button>
+              <button class="chip" data-type="phone" type="button">Phone</button>
+              <button class="chip" data-type="email" type="button">Email</button>
+              <button class="chip" data-type="wifi" type="button">WiFi</button>
+            </div>
+          </div>
+
+          <!-- Dynamic input regions, one shown at a time based on selected chip -->
+          <div id="input-text" class="input-block">
+            <label class="field-label" for="text-value">Text</label>
+            <textarea id="text-value" rows="3" placeholder="Type anything you want encoded..."></textarea>
+          </div>
+
+          <div id="input-url" class="input-block hidden">
+            <label class="field-label" for="url-value">URL</label>
+            <input id="url-value" type="text" placeholder="example.com or https://example.com" />
+          </div>
+
+          <div id="input-phone" class="input-block hidden">
+            <label class="field-label" for="phone-value">Phone number</label>
+            <input id="phone-value" type="tel" placeholder="+1 555 123 4567" />
+          </div>
+
+          <div id="input-email" class="input-block hidden">
+            <label class="field-label" for="email-value">Email address</label>
+            <input id="email-value" type="email" placeholder="name@example.com" />
+            <label class="field-label" for="email-subject">Subject (optional)</label>
+            <input id="email-subject" type="text" placeholder="Subject line" />
+          </div>
+
+          <div id="input-wifi" class="input-block hidden">
+            <label class="field-label" for="wifi-ssid">Network name (SSID)</label>
+            <input id="wifi-ssid" type="text" placeholder="My Wi-Fi" />
+            <label class="field-label" for="wifi-password">Password</label>
+            <input id="wifi-password" type="text" placeholder="Leave blank if open network" />
+            <label class="field-label" for="wifi-security">Security</label>
+            <select id="wifi-security">
+              <option value="WPA">WPA / WPA2</option>
+              <option value="WEP">WEP</option>
+              <option value="nopass">None (open network)</option>
+            </select>
+          </div>
+
+          <p id="generate-error" class="error-msg hidden" role="alert"></p>
+
+          <div class="divider"></div>
+
+          <div class="field-row">
+            <div class="field-group half">
+              <label class="field-label" for="fg-color">Foreground color</label>
+              <input id="fg-color" type="color" value="#142019" />
+            </div>
+            <div class="field-group half">
+              <label class="field-label" for="bg-color">Background color</label>
+              <input id="bg-color" type="color" value="#ffffff" />
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="size-slider">
+              Size <span id="size-value" class="mono-tag">320px</span>
+            </label>
+            <input id="size-slider" type="range" min="128" max="512" step="8" value="320" />
+          </div>
+
+          <button id="generate-btn" class="btn btn-primary btn-block" type="button">Generate QR code</button>
+        </div>
+
+        <div class="card preview-card">
+          <div id="qr-empty-state" class="empty-state">
+            <div class="scan-corner-frame">
+              <span class="corner tl"></span><span class="corner tr"></span>
+              <span class="corner bl"></span><span class="corner br"></span>
+            </div>
+            <p>Your QR code will appear here</p>
+          </div>
+          <div id="qr-result" class="qr-result hidden">
+            <div class="qr-canvas-frame">
+              <canvas id="qr-canvas"></canvas>
+            </div>
+            <div class="result-actions">
+              <button id="download-btn" class="btn btn-secondary" type="button">Download PNG</button>
+              <button id="share-btn" class="btn btn-ghost" type="button">Share</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== SCAN PANEL ===== -->
+      <section id="panel-scan" class="panel" role="tabpanel">
+        <div class="card">
+          <div class="field-group">
+            <label class="field-label">Camera scan</label>
+            <div id="reader" class="reader-frame"></div>
+            <div class="scan-controls">
+              <button id="camera-start-btn" class="btn btn-primary" type="button">Start camera</button>
+              <button id="camera-stop-btn" class="btn btn-ghost hidden" type="button">Stop camera</button>
+            </div>
+            <p id="camera-error" class="error-msg hidden" role="alert"></p>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="field-group">
+            <label class="field-label" for="file-input">Or upload an image</label>
+            <label id="drop-zone" for="file-input" class="drop-zone">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+              <span>Click to choose an image, or drag one here</span>
+              <input id="file-input" type="file" accept="image/*" hidden />
+            </label>
+            <p id="file-error" class="error-msg hidden" role="alert"></p>
+          </div>
+
+          <div id="scan-loading" class="loading-row hidden">
+            <span class="spinner" aria-hidden="true"></span> Reading QR code...
+          </div>
+
+          <div id="scan-result" class="scan-result hidden">
+            <label class="field-label">Decoded content</label>
+            <div class="result-box"><p id="scan-result-text" class="mono-tag result-text"></p></div>
+            <div class="result-actions">
+              <button id="copy-btn" class="btn btn-secondary" type="button">Copy</button>
+              <a id="open-link-btn" class="btn btn-ghost hidden" href="#" target="_blank" rel="noopener noreferrer">Open link</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== HISTORY PANEL ===== -->
+      <section id="panel-history" class="panel" role="tabpanel">
+        <div class="card">
+          <div class="history-header">
+            <label class="field-label">Recent activity</label>
+            <button id="clear-history-btn" class="btn btn-ghost btn-small" type="button">Clear all</button>
+          </div>
+          <ul id="history-list" class="history-list"></ul>
+          <p id="history-empty" class="empty-note">Nothing yet. Generated and scanned codes will show up here.</p>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="app-footer">
+      <p>Runs fully client-side. Nothing you generate or scan is sent anywhere.</p>
+    </footer>
+  </div>
+
+  <!-- Live region for copy confirmation, kept out of layout -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>

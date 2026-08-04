@@ -1,9 +1,5 @@
 /* ==========================================================================
-   QR Converter Pro — script.js
-   Everything here runs client-side only. No data leaves the browser.
-   Relies on two CDN libraries loaded in index.html:
-     - qrcode.js      -> QRCode.toCanvas(...)      for generating codes
-     - html5-qrcode.js -> Html5Qrcode               for camera + file scanning
+   QR Converter Pro — script.js (FIXED VERSION)
    ========================================================================== */
 
 (() => {
@@ -72,7 +68,6 @@
         document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
         $(`panel-${tab.dataset.tab}`).classList.add("active");
 
-        // Stop the camera whenever the user navigates away from the scan tab
         if (tab.dataset.tab !== "scan") stopCamera();
         if (tab.dataset.tab === "history") renderHistory();
       });
@@ -99,8 +94,6 @@
     });
   }
 
-  // Builds the exact string that gets encoded, based on the selected type.
-  // Throws a descriptive Error if required fields are missing/invalid.
   function buildPayload() {
     switch (currentType) {
       case "text": {
@@ -160,11 +153,65 @@
   }
 
   /* ---------------------------------------------------------------------
-     Generator: generate + download + share
+     Generate QR Code with better quality
+     --------------------------------------------------------------------- */
+  function generateQRCode(payload, size, dark, light) {
+    return new Promise((resolve, reject) => {
+      const canvas = $("qr-canvas");
+      
+      // Clear canvas
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Set canvas size
+      canvas.width = size;
+      canvas.height = size;
+      
+      // Ensure we have a working QRCode.toCanvas
+      if (typeof QRCode === 'undefined' || typeof QRCode.toCanvas === 'undefined') {
+        reject(new Error("QR library not available"));
+        return;
+      }
+      
+      // Generate with high quality settings
+      QRCode.toCanvas(canvas, payload, {
+        width: size,
+        margin: 4,  // Larger margin for better scanning
+        color: {
+          dark: dark,
+          light: light
+        }
+      }, function(error) {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(canvas);
+        }
+      });
+    });
+  }
+
+  /* ---------------------------------------------------------------------
+     Generator: generate + download + share (FIXED)
      --------------------------------------------------------------------- */
   function initGenerator() {
-    $("generate-btn").addEventListener("click", async () => {
+    // Check if QR library is available
+    if (typeof QRCode === 'undefined') {
+      console.error('QRCode library not available!');
+      showError($("generate-error"), "QR library not loaded. Please check your internet connection.");
+      return;
+    }
+
+    if (typeof QRCode.toCanvas === 'undefined') {
+      console.error('QRCode.toCanvas not available!');
+      showError($("generate-error"), "QR library compatibility issue. Please refresh the page.");
+      return;
+    }
+
+    // Main generate function
+    async function doGenerate() {
       hideError($("generate-error"));
+      
       let payload;
       try {
         payload = buildPayload();
@@ -173,35 +220,56 @@
         return;
       }
 
+      console.log("Generating QR for:", payload);
+      console.log("Payload length:", payload.length);
+
       const size = parseInt($("size-slider").value, 10);
       const dark = $("fg-color").value;
       const light = $("bg-color").value;
-      const canvas = $("qr-canvas");
 
       try {
-        await QRCode.toCanvas(canvas, payload, {
-          width: size,
-          margin: 2,
-          color: { dark, light },
+        await generateQRCode(payload, size, dark, light);
+        
+        console.log("QR generated successfully!");
+        $("qr-empty-state").classList.add("hidden");
+        $("qr-result").classList.remove("hidden");
+
+        addHistoryEntry({
+          kind: "generated",
+          type: currentType,
+          value: payload,
+          timestamp: Date.now(),
         });
-      } catch (err) {
-        // The underlying library throws when content is too long for a QR
-        // code's capacity — surface that clearly rather than failing silently.
-        showError($("generate-error"), "Couldn't generate a code for that input (it may be too long). Try shortening it.");
-        return;
+        
+        showToast("QR code generated!");
+      } catch (error) {
+        console.error("QR Generation Error:", error);
+        showError($("generate-error"), "Couldn't generate QR code. Try shorter text or different content.");
       }
+    }
 
-      $("qr-empty-state").classList.add("hidden");
-      $("qr-result").classList.remove("hidden");
-
-      addHistoryEntry({
-        kind: "generated",
-        type: currentType,
-        value: payload,
-        timestamp: Date.now(),
+    // Generate button
+    $("generate-btn").addEventListener("click", doGenerate);
+    
+    // Test button - generates a known working QR
+    $("test-qr-btn").addEventListener("click", function() {
+      // Temporarily switch to URL type with Google
+      const originalType = currentType;
+      const originalText = $("text-value").value;
+      
+      // Set to Google URL
+      $("text-value").value = "https://google.com";
+      currentType = "text";
+      
+      // Generate
+      doGenerate().then(() => {
+        // Restore original values
+        currentType = originalType;
+        $("text-value").value = originalText;
       });
     });
 
+    // Download button
     $("download-btn").addEventListener("click", () => {
       const canvas = $("qr-canvas");
       const link = document.createElement("a");
@@ -211,6 +279,7 @@
       showToast("Download started");
     });
 
+    // Share button
     $("share-btn").addEventListener("click", async () => {
       const canvas = $("qr-canvas");
       try {
@@ -226,8 +295,6 @@
           showToast("Sharing isn't supported here — try Download instead");
         }
       } catch (err) {
-        // User cancelling the native share sheet also lands here; that's not
-        // an actual failure, so we stay quiet unless it's something else.
         if (err && err.name !== "AbortError") {
           showToast("Couldn't share — try Download instead");
         }
@@ -249,16 +316,24 @@
   async function startCamera() {
     hideError($("camera-error"));
     try {
+      if (typeof Html5Qrcode === 'undefined') {
+        throw new Error("QR scanner library not loaded");
+      }
+      
       if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
 
       await html5QrCode.start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
+        { 
+          fps: 10, 
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0
+        },
         (decodedText) => {
           handleScanSuccess(decodedText);
           stopCamera();
         },
-        () => { /* per-frame "not found yet" callback — expected, ignore */ }
+        () => { /* per-frame callback - ignore */ }
       );
 
       cameraRunning = true;
@@ -267,7 +342,7 @@
     } catch (err) {
       showError(
         $("camera-error"),
-        "Couldn't access the camera. Check that you've granted camera permission and that no other app is using it."
+        "Couldn't access the camera. Check that you've granted camera permission."
       );
     }
   }
@@ -278,7 +353,7 @@
         await html5QrCode.stop();
         html5QrCode.clear();
       } catch (err) {
-        /* camera may already be stopped — safe to ignore */
+        // ignore
       }
     }
     cameraRunning = false;
@@ -320,18 +395,22 @@
     $("scan-result").classList.add("hidden");
 
     try {
+      if (typeof Html5Qrcode === 'undefined') {
+        throw new Error("QR scanner library not loaded");
+      }
+      
       if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
       const decodedText = await html5QrCode.scanFile(file, false);
       handleScanSuccess(decodedText);
     } catch (err) {
-      showError($("file-error"), "No QR code found in that image. Try a clearer photo or a different file.");
+      showError($("file-error"), "No QR code found in that image. Try a clearer photo.");
     } finally {
       $("scan-loading").classList.add("hidden");
     }
   }
 
   /* ---------------------------------------------------------------------
-     Scanner: shared result handling (camera + file both land here)
+     Scanner: shared result handling
      --------------------------------------------------------------------- */
   function handleScanSuccess(decodedText) {
     $("scan-result").classList.remove("hidden");
@@ -439,6 +518,11 @@
      Boot
      --------------------------------------------------------------------- */
   document.addEventListener("DOMContentLoaded", () => {
+    console.log("QR Converter Pro starting...");
+    console.log("QRCode library loaded:", typeof QRCode);
+    console.log("QRCode.toCanvas available:", typeof QRCode?.toCanvas);
+    console.log("Html5Qrcode library loaded:", typeof Html5Qrcode);
+    
     initTheme();
     initTabs();
     initTypeChips();
@@ -449,5 +533,10 @@
     initCopyButton();
     initHistoryPanel();
     renderHistory();
+    
+    // Auto-generate a QR on load
+    setTimeout(() => {
+      document.getElementById("generate-btn").click();
+    }, 500);
   });
 })();

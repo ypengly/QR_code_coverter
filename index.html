@@ -6,24 +6,144 @@
   <title>QR Converter Pro</title>
   <meta name="description" content="Generate and scan QR codes instantly, fully in your browser." />
 
-  <!-- Favicon (inline SVG, no extra file needed) -->
-  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-
-  <!-- Fonts: Space Grotesk (display), Inter (body/UI), IBM Plex Mono (data/codes) -->
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 
   <link rel="stylesheet" href="style.css" />
 
-  <!-- QR generation -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-  <!-- QR scanning (camera + image file, one library covers both) -->
+  <!-- QR Generation - Multiple sources -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <!-- QR Scanning -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  
+  <!-- QR Code Compatibility Layer with Better Quality -->
+  <script>
+    (function() {
+      'use strict';
+      
+      // If QRCode exists but doesn't have toCanvas, add it
+      if (typeof QRCode !== 'undefined' && typeof QRCode.toCanvas === 'undefined') {
+        console.log('Adding toCanvas compatibility to QRCode');
+        
+        if (typeof qrcode !== 'undefined') {
+          QRCode.toCanvas = function(canvas, text, options, callback) {
+            try {
+              if (typeof options === 'function') {
+                callback = options;
+                options = { width: 400, margin: 4, color: { dark: '#000000', light: '#ffffff' } };
+              }
+              
+              // Default options with better quality
+              const size = options.width || 400;
+              const dark = options.color?.dark || '#000000';
+              const light = options.color?.light || '#ffffff';
+              const margin = options.margin || 4;
+              
+              // Use higher error correction for better scanning
+              const qr = qrcode(40, 'H'); // 'H' = Highest error correction
+              qr.addData(text);
+              qr.make();
+              
+              const ctx = canvas.getContext('2d');
+              const cells = qr.getModuleCount();
+              const totalSize = size - (margin * 2);
+              const cellSize = Math.floor(totalSize / cells);
+              
+              // Center the QR code
+              const actualSize = cells * cellSize;
+              const offset = Math.floor((size - actualSize) / 2);
+              
+              // Clear and draw background
+              ctx.fillStyle = light;
+              ctx.fillRect(0, 0, size, size);
+              
+              // Draw QR modules with high contrast
+              for (let row = 0; row < cells; row++) {
+                for (let col = 0; col < cells; col++) {
+                  if (qr.isDark(row, col)) {
+                    ctx.fillStyle = dark;
+                    ctx.fillRect(
+                      offset + (col * cellSize), 
+                      offset + (row * cellSize), 
+                      cellSize, 
+                      cellSize
+                    );
+                  }
+                }
+              }
+              
+              // Add a quiet zone border (helps with scanning)
+              ctx.strokeStyle = light;
+              ctx.lineWidth = 1;
+              ctx.strokeRect(offset - 1, offset - 1, actualSize + 2, actualSize + 2);
+              
+              if (callback) callback(null);
+            } catch (err) {
+              if (callback) callback(err);
+              else throw err;
+            }
+          };
+          console.log('QRCode.toCanvas added with improved quality');
+        }
+      }
+      
+      // If QRCode doesn't exist, create it
+      if (typeof QRCode === 'undefined' && typeof qrcode !== 'undefined') {
+        console.log('Creating QRCode from qrcode-generator');
+        window.QRCode = {
+          toCanvas: function(canvas, text, options, callback) {
+            try {
+              if (typeof options === 'function') {
+                callback = options;
+                options = { width: 400, margin: 4, color: { dark: '#000000', light: '#ffffff' } };
+              }
+              
+              const size = options.width || 400;
+              const dark = options.color?.dark || '#000000';
+              const light = options.color?.light || '#ffffff';
+              const margin = options.margin || 4;
+              
+              const qr = qrcode(40, 'H');
+              qr.addData(text);
+              qr.make();
+              
+              const ctx = canvas.getContext('2d');
+              const cells = qr.getModuleCount();
+              const totalSize = size - (margin * 2);
+              const cellSize = Math.floor(totalSize / cells);
+              const actualSize = cells * cellSize;
+              const offset = Math.floor((size - actualSize) / 2);
+              
+              ctx.fillStyle = light;
+              ctx.fillRect(0, 0, size, size);
+              
+              for (let row = 0; row < cells; row++) {
+                for (let col = 0; col < cells; col++) {
+                  if (qr.isDark(row, col)) {
+                    ctx.fillStyle = dark;
+                    ctx.fillRect(offset + (col * cellSize), offset + (row * cellSize), cellSize, cellSize);
+                  }
+                }
+              }
+              
+              if (callback) callback(null);
+            } catch (err) {
+              if (callback) callback(err);
+              else throw err;
+            }
+          }
+        };
+        console.log('QRCode created from qrcode-generator with improved quality');
+      }
+    })();
+  </script>
 </head>
 <body>
 
-  <!-- Decorative module-grid backdrop, echoes a QR code's own structure -->
+  <!-- Decorative module-grid backdrop -->
   <div class="grid-backdrop" aria-hidden="true"></div>
 
   <div class="app">
@@ -86,15 +206,15 @@
             </div>
           </div>
 
-          <!-- Dynamic input regions, one shown at a time based on selected chip -->
+          <!-- Dynamic input regions -->
           <div id="input-text" class="input-block">
             <label class="field-label" for="text-value">Text</label>
-            <textarea id="text-value" rows="3" placeholder="Type anything you want encoded..."></textarea>
+            <textarea id="text-value" rows="3" placeholder="Type anything you want encoded...">https://google.com</textarea>
           </div>
 
           <div id="input-url" class="input-block hidden">
             <label class="field-label" for="url-value">URL</label>
-            <input id="url-value" type="text" placeholder="example.com or https://example.com" />
+            <input id="url-value" type="text" placeholder="example.com or https://example.com" value="https://google.com" />
           </div>
 
           <div id="input-phone" class="input-block hidden">
@@ -139,12 +259,15 @@
 
           <div class="field-group">
             <label class="field-label" for="size-slider">
-              Size <span id="size-value" class="mono-tag">320px</span>
+              Size <span id="size-value" class="mono-tag">400px</span>
             </label>
-            <input id="size-slider" type="range" min="128" max="512" step="8" value="320" />
+            <input id="size-slider" type="range" min="200" max="600" step="10" value="400" />
           </div>
 
           <button id="generate-btn" class="btn btn-primary btn-block" type="button">Generate QR code</button>
+          
+          <!-- Test QR button with known working data -->
+          <button id="test-qr-btn" class="btn btn-secondary btn-block" type="button" style="margin-top: 10px;">Test with Google URL</button>
         </div>
 
         <div class="card preview-card">
@@ -221,14 +344,66 @@
 
     </main>
 
-    <footer class="app-footer">
-      <p>Runs fully client-side. Nothing you generate or scan is sent anywhere.</p>
-    </footer>
+  <footer class="app-footer">
+  <div class="footer-content">
+    <div class="footer-brand">
+      <svg class="footer-icon" width="24" height="24" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+        <rect x="5" y="5" width="4" height="4" fill="currentColor"/>
+        <rect x="21" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+        <rect x="25" y="5" width="4" height="4" fill="currentColor"/>
+        <rect x="1" y="21" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+        <rect x="5" y="25" width="4" height="4" fill="currentColor"/>
+        <rect x="21" y="21" width="4" height="4" fill="currentColor"/>
+        <rect x="29" y="21" width="4" height="4" fill="currentColor"/>
+        <rect x="21" y="29" width="4" height="4" fill="currentColor"/>
+        <rect x="29" y="29" width="4" height="4" fill="currentColor"/>
+        <rect x="25" y="25" width="4" height="4" fill="currentColor"/>
+      </svg>
+      <span class="footer-brand-name">QR Converter Pro</span>
+    </div>
+    
+    <div class="footer-divider"></div>
+    
+    <div class="footer-info">
+      <p class="footer-privacy">Runs fully client-side. Nothing you generate or scan is sent anywhere.</p>
+      <div class="footer-developer">
+        <span class="footer-label">Developed by</span>
+        <span class="footer-name">Y Pengly</span>
+      </div>
+    </div>
+    
+    <div class="footer-divider"></div>
+    
+    <div class="footer-social">
+      <a href="https://github.com/ypengly" class="social-link" aria-label="GitHub" title="GitHub">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.15 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.62.24 2.85.12 3.15.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+      </a>
+      <a href="https://www.linkedin.com/in/y-pengly-276720423/" class="social-link" aria-label="LinkedIn" title="LinkedIn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+      </a>
+      <a href="https://t.me/Pengly_27" class="social-link" aria-label="Telegram" title="Telegram">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+        </svg>
+      </a>
+      <a href="https://youtube.com/@ypengly?si=EjQ8DmNYLQbWCOTy" class="social-link" aria-label="YouTube" title="YouTube">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+      </a>
+    </div>
+  </div>
+  
+  <div class="footer-bottom">
+    <p class="footer-copy">&copy; 2026 <span class="footer-dev">Y Pengly</span>. All rights reserved.</p>
+    <p class="footer-version">v1.0.0</p>
+  </div>
+</footer>
   </div>
 
-  <!-- Live region for copy confirmation, kept out of layout -->
+  <!-- Live region for copy confirmation -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="script.js"></script>
 </body>
+
 </html>

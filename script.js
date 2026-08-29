@@ -163,9 +163,15 @@
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Set canvas size
-      canvas.width = size;
-      canvas.height = size;
+      // Set canvas size with extra space for rendering quality
+      const devicePixelRatio = window.devicePixelRatio || 1;
+      canvas.width = size * devicePixelRatio;
+      canvas.height = size * devicePixelRatio;
+      
+      // Scale context for crisp rendering
+      ctx.scale(devicePixelRatio, devicePixelRatio);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       
       // Ensure we have a working QRCode.toCanvas
       if (typeof QRCode === 'undefined' || typeof QRCode.toCanvas === 'undefined') {
@@ -173,8 +179,13 @@
         return;
       }
       
-      // Generate with high quality settings
-      QRCode.toCanvas(canvas, payload, {
+      // Create temporary canvas for QR generation
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = size;
+      tempCanvas.height = size;
+      
+      // Generate QR on temp canvas with high quality settings
+      QRCode.toCanvas(tempCanvas, payload, {
         width: size,
         margin: 4,  // Larger margin for better scanning
         color: {
@@ -184,8 +195,25 @@
       }, function(error) {
         if (error) {
           reject(error);
-        } else {
+          return;
+        }
+        
+        try {
+          // Copy from temp canvas to main canvas with high quality
+          ctx.drawImage(tempCanvas, 0, 0, size, size, 0, 0, size, size);
+          
+          // Apply subtle anti-aliasing enhancement
+          const imageData = ctx.getImageData(0, 0, size, size);
+          ctx.putImageData(imageData, 0, 0);
+          
+          // Reset scale
+          ctx.scale(1/devicePixelRatio, 1/devicePixelRatio);
+          canvas.style.width = size + 'px';
+          canvas.style.height = size + 'px';
+          
           resolve(canvas);
+        } catch (err) {
+          reject(err);
         }
       });
     });
